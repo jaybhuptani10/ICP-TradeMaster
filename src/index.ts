@@ -2,6 +2,10 @@ import { v4 as uuidv4 } from 'uuid';
 import { Server, StableBTreeMap, ic } from 'azle';
 import express from 'express';
 
+
+type Optional<T> = T | null | undefined;
+
+
 // Define types for trade orders
 interface TradeOrder {
    id: string;
@@ -32,18 +36,33 @@ export default Server(() => {
    // Endpoint to place a new trade order
    app.post("/orders", (req, res) => {
       const { symbol, quantity, price, type } = req.body;
-      if (!symbol || !quantity || !price || !type || (type !== 'buy' && type !== 'sell')) {
-         return res.status(400).json({ error: "Invalid trade order data" });
+
+
+      // Input validation
+      const validationResult = validateTradeOrder(symbol, quantity, price, type);
+      if (validationResult) {
+         return res.status(400).json({ error: validationResult });
       }
+
+      // Convert quantity and price to numbers
+      const parsedQuantity = parseFloat(quantity as string);
+      const parsedPrice = parseFloat(price as string);
+
+      // Create a new trade order
       const newOrder: TradeOrder = {
          id: uuidv4(),
-         symbol,
-         quantity,
-         price,
-         type,
+         symbol: symbol as string,
+         quantity: parsedQuantity,
+         price: parsedPrice,
+         type: type as 'buy' | 'sell',
          createdAt: getCurrentDate()
       };
+
+      // Insert the trade order into storage
       tradeOrderStorage.insert(newOrder.id, newOrder);
+
+      // Respond with the new trade order
+
       res.json(newOrder);
    });
 
@@ -128,6 +147,40 @@ export default Server(() => {
       res.json(rebalancedPortfolio);
    });
 
+
+   // Other endpoints...
+
+   return app.listen();
+});
+
+function getCurrentDate(): Date {
+   const timestamp = BigInt(ic.time());
+   return new Date(Number(timestamp) / 1000000);
+}
+
+// Function to validate trade order input
+function validateTradeOrder(symbol: Optional<string>, quantity: Optional<string>, price: Optional<string>, type: Optional<string>): string | undefined {
+   if (!symbol || !quantity || !price || !type) {
+      return 'All fields are required';
+   }
+
+   const parsedQuantity = parseFloat(quantity as string);
+   const parsedPrice = parseFloat(price as string);
+
+   if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
+      return 'Invalid quantity';
+   }
+
+   if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      return 'Invalid price';
+   }
+
+   if (type !== 'buy' && type !== 'sell') {
+      return 'Invalid trade type. It must be "buy" or "sell".';
+   }
+
+   return undefined;
+
    // Endpoint for order book management (not implemented in this example)
 
    // Endpoint for multi-exchange support (not implemented in this example)
@@ -136,10 +189,10 @@ export default Server(() => {
 
    // Endpoint for security measures (not implemented in this example)
 
-   return app.listen();
-});
+ 
 
 function getCurrentDate() {
    const timestamp = new Number(ic.time());
    return new Date(timestamp.valueOf() / 1000_000);
+
 }
